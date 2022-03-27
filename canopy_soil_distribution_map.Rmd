@@ -1,0 +1,29 @@
+---
+title: "canopy_soil_distribution_map"
+author: "Ethan Abercrombie"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+require(sf)
+require(tidyverse)
+require(raster) #loads GADM data
+
+```
+
+```{r}
+#load Spatial Data
+
+##Costa Rica
+costa_rica_country <- st_as_sf(getData(path = '/Users/ethanabercrombie/Desktop/Spatial_Data/',
+                                       country = "CRI",
+                                       level = 0))
+
+costa_rica_district <- st_as_sf(getData(path = '/Users/ethanabercrombie/Desktop/Spatial_Data/',
+                                       country = "CRI",
+                                       level = 1))
+ggplot(data = costa_rica_country) +
+  geom_sf() +
+  geom_sf(data = costa_rica_district)
+```
