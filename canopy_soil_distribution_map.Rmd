@@ -8,22 +8,117 @@ output: html_document
 ```{r}
 require(sf)
 require(tidyverse)
-require(raster) #loads GADM data
+#require(raster) #loads GADM data
+require(elevatr) #elevation data
+require(maps)
+require(rmapshaper) #remove islands (ms_filter_islands)
+require(GADMTools) #union
 
+#Quickplot function
+quick_plot <- function(plot_export_folder = '/Users/ethanabercrombie/Desktop/', file_name = 'test', plot_object){
+    quartz(type = 'pdf',
+         dpi = 144,
+         antialias = T,
+         file = paste0(plot_export_folder,
+                       file_name))
+  
+  print(plot_object)
+  
+  graphics.off()
+  
+# path = paste0(plot_export_folder,
+#                 file_name,
+#                 '.pdf')
+# system2('open', args = c('-a Preview.app',path), wait = FALSE)
+}
 ```
 
 ```{r}
 #load Spatial Data
 
-##Costa Rica
-costa_rica_country <- st_as_sf(getData(path = '/Users/ethanabercrombie/Desktop/Spatial_Data/',
-                                       country = "CRI",
-                                       level = 0))
+#world data
+##I am using naturalearthdata. The code for using gadm data is below, but it is too extensive for a world map.
+world_data <- st_read('/Users/ethanabercrombie/Desktop/Spatial_Data/ne_110m_land/ne_110m_land.shp')
 
-costa_rica_district <- st_as_sf(getData(path = '/Users/ethanabercrombie/Desktop/Spatial_Data/',
+world_data <- st_read('/Users/ethanabercrombie/Desktop/Spatial_Data/gadm404.gpkg')
+  
+
+world_data <- ms_filter_islands(
+  st_read('/Users/ethanabercrombie/Desktop/Spatial_Data/gadm404-levels.gpkg',
+                        layer = 'level1') %>% 
+  filter(COUNTRY == 'Costa Rica'),
+  min_area = 10^8
+)
+
+CR_data <- ms_filter_islands(
+  getData(path = '/Users/ethanabercrombie/Desktop/Spatial_Data/',
+          country = 'CRI',
+          level = 0),
+  min_area = 10^8
+)
+
+quick_plot(plot_object = costa_rica_map)
+
+#Elevation data
+CR_elevation <- as.data.frame(get_elev_raster(locations = CR_data,
+                                   z = 9,
+                                   clip = "locations"))
+
+colnames(CR_elevation)[3] <- "elevation"
+
+costa_rica_elevation <- costa_rica_elevation[complete.cases(costa_rica_elevation), ]
+
+#Plot map
+ggplot() +
+  geom_tile(data = costa_rica_elevation, aes(x = x, y = y, fill = elevation)) +
+  geom_sf(data = world_data,
+          fill = NA) +
+  scale_fill_viridis_c()
+```
+
+```{r}
+#load Spatial Data
+##Costa Rica
+costa_rica_country <- ms_filter_islands(
+  st_as_sf(
+    getData(path = '/Users/ethanabercrombie/Desktop/Spatial_Data/',
                                        country = "CRI",
-                                       level = 1))
-ggplot(data = costa_rica_country) +
-  geom_sf() +
-  geom_sf(data = costa_rica_district)
+                                       level = 0)
+           ),
+  min_area = 1000000000
+)
+
+
+world_data <- st_read('/Users/ethanabercrombie/Desktop/Spatial_Data/gadm404-levels.gpkg',
+             layer = 'level1')
+  
+
+world_data <- map_data('world')
+
+
+#Elevation data
+
+costa_rica_elevation <- as.data.frame(
+  get_elev_raster(locations = costa_rica_country, z = 9, clip = "locations"),
+  xy = TRUE)
+
+colnames(costa_rica_elevation)[3] <- "elevation"
+
+costa_rica_elevation <- costa_rica_elevation[complete.cases(costa_rica_elevation), ]
+
+# costa_rica_district <- st_as_sf(getData(path = '/Users/ethanabercrombie/Desktop/Spatial_Data/',
+#                                        country = "CRI",
+#                                        level = 1))
+
+ggplot() +
+  geom_sf(data = world_data)
+
+
+#Plot map
+ggplot() +
+  geom_tile(data = costa_rica_elevation, aes(x = x, y = y, fill = elevation)) +
+  geom_sf(data = costa_rica_country,
+          fill = NA) +
+  scale_fill_viridis_c()
+
 ```
