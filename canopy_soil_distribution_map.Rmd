@@ -8,11 +8,13 @@ output: html_document
 ```{r}
 require(sf)
 require(tidyverse)
-#require(raster) #loads GADM data
+require(rnaturalearth)
+require(raster) #loads GADM data
 require(elevatr) #elevation data
 require(maps)
 require(rmapshaper) #remove islands (ms_filter_islands)
 require(GADMTools) #union
+require(maps) #map_data()
 
 #Quickplot function
 quick_plot <- function(plot_export_folder = '/Users/ethanabercrombie/Desktop/', file_name = 'test', plot_object){
@@ -33,92 +35,114 @@ quick_plot <- function(plot_export_folder = '/Users/ethanabercrombie/Desktop/', 
 }
 ```
 
+Clean article data.
+
 ```{r}
-#load Spatial Data
+article_data <- read_csv('~/Desktop/Canopy_Soils_Review/Systematic Search_latlong.csv')
 
-#world data
-##I am using naturalearthdata. The code for using gadm data is below, but it is too extensive for a world map.
-world_data <- st_read('/Users/ethanabercrombie/Desktop/Spatial_Data/ne_110m_land/ne_110m_land.shp')
+article_data <- article_data[1:117,] %>% 
+  rename('study_site_country' = "study site country",
+         'first_author_country' = "first author country") %>% 
+  mutate(Latitude = as.numeric(Latitude),
+         Longitude = as.numeric(Longitude)) %>% 
+  mutate(Longitude = if_else(Longitude > 0 & study_site_country == 'Costa Rica',
+                             Longitude*-1,
+                             Longitude)) %>% 
+  filter(Latitude != "NA" &
+           Longitude != "NA")
 
-world_data <- st_read('/Users/ethanabercrombie/Desktop/Spatial_Data/gadm404.gpkg')
-  
-
-world_data <- ms_filter_islands(
-  st_read('/Users/ethanabercrombie/Desktop/Spatial_Data/gadm404-levels.gpkg',
-                        layer = 'level1') %>% 
-  filter(COUNTRY == 'Costa Rica'),
-  min_area = 10^8
-)
-
-CR_data <- ms_filter_islands(
-  getData(path = '/Users/ethanabercrombie/Desktop/Spatial_Data/',
-          country = 'CRI',
-          level = 0),
-  min_area = 10^8
-)
-
-quick_plot(plot_object = costa_rica_map)
-
-#Elevation data
-CR_elevation <- as.data.frame(get_elev_raster(locations = CR_data,
-                                   z = 9,
-                                   clip = "locations"))
-
-colnames(CR_elevation)[3] <- "elevation"
-
-costa_rica_elevation <- costa_rica_elevation[complete.cases(costa_rica_elevation), ]
-
-#Plot map
-ggplot() +
-  geom_tile(data = costa_rica_elevation, aes(x = x, y = y, fill = elevation)) +
-  geom_sf(data = world_data,
-          fill = NA) +
-  scale_fill_viridis_c()
+article_data_sf <- st_as_sf(x = article_data,
+                            coords = c(x = 'Longitude',
+                                       y = 'Latitude'),
+                            crs = 4326,
+                            remove = FALSE)
 ```
 
 ```{r}
-#load Spatial Data
-##Costa Rica
-costa_rica_country <- ms_filter_islands(
+#Load spatial data.
+
+#world_data
+continents <- c('North America',
+                'South America',
+                'Europe',
+                'Asia',
+                'Africa',
+                'Oceania')
+world_data <- st_as_sf(ne_countries(continent = continents))
+
+#costa_rica
+cr_0_data <- ms_filter_islands(
   st_as_sf(
-    getData(path = '/Users/ethanabercrombie/Desktop/Spatial_Data/',
-                                       country = "CRI",
-                                       level = 0)
-           ),
-  min_area = 1000000000
+    getData(path = '~/Desktop/Spatial_Data/',
+                     country = 'CRI',
+                     level = 0)
+  ),
+  min_area = 10^8
 )
 
+cr_1_data <- ms_filter_islands(
+  st_as_sf(
+    getData(path = '~/Desktop/Spatial_Data/',
+                     country = 'CRI',
+                     level = 1)
+  ),
+  min_area = 10^8
+)
+```
 
-world_data <- st_read('/Users/ethanabercrombie/Desktop/Spatial_Data/gadm404-levels.gpkg',
-             layer = 'level1')
-  
 
-world_data <- map_data('world')
-
-
+```{r}
 #Elevation data
 
-costa_rica_elevation <- as.data.frame(
-  get_elev_raster(locations = costa_rica_country, z = 9, clip = "locations"),
-  xy = TRUE)
+world_elevation <- get_elev_raster(locations = world_data,
+                                z = 0,
+                                clip = 'locations')
+world_elevation <- as.data.frame(world_elevation,
+                                 xy = T)
+colnames(world_elevation)[3] = "elevation"
+world_elevation <- world_elevation[complete.cases(world_elevation),]
 
-colnames(costa_rica_elevation)[3] <- "elevation"
+##Costa Rica
+cr_elevation <- get_elev_raster(locations = cr_0_data,
+                                z = 9,
+                                clip = 'locations')
+cr_elevation <- as.data.frame(cr_elevation,
+                              xy = T)
+colnames(cr_elevation)[3] = "elevation"
+cr_elevation <- cr_elevation[complete.cases(cr_elevation),]
+```
 
-costa_rica_elevation <- costa_rica_elevation[complete.cases(costa_rica_elevation), ]
+```{r}
+world_map <- ggplot() +
+  geom_sf(data = world_data) +
+  geom_sf(data = article_data_sf) +
+  geom_raster(data = world_elevation,
+            aes(x = x,
+                y = y,
+                fill = elevation)) +
+  theme(panel.background = element_blank(),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks = element_blank())
+quick_plot(plot_object = world_map)
 
-# costa_rica_district <- st_as_sf(getData(path = '/Users/ethanabercrombie/Desktop/Spatial_Data/',
-#                                        country = "CRI",
-#                                        level = 1))
-
-ggplot() +
-  geom_sf(data = world_data)
-
-
-#Plot map
-ggplot() +
-  geom_tile(data = costa_rica_elevation, aes(x = x, y = y, fill = elevation)) +
-  geom_sf(data = costa_rica_country,
+cr_map <- ggplot() +
+  geom_sf(data = cr_0_data,
+          color = 'white') +
+  geom_raster(data = cr_elevation,
+            aes(x = x,
+                y = y,
+                fill = elevation)) +
+  geom_sf(data = cr_1_data,
+          color = 'light gray',
           fill = NA) +
+  geom_sf(data = st_jitter(filter(article_data_sf,
+                           study_site_country == 'Costa Rica'),
+                           amount = 0.05),
+          color = "white",
+          alpha = 0.3,
+          size = 2.5,
+          inherit.aes = F) +
   scale_fill_viridis_c()
-
+quick_plot(plot_object = cr_map)
 ```
